@@ -1,0 +1,109 @@
+ssh mtalh2@cscluster.uis.edu
+
+pyspark
+
+data = spark.read.format("libsvm").load("/user/data/CSC533DM/sample_libsvm_data.txt")
+
+data.show(1, truncate=False)
+
+from pyspark.ml.feature import StringIndexer
+
+labelIndexer = StringIndexer(inputCol="label",outputCol="indexedLabel").fit(data)
+
+labelIndexer.transform(data).show(5)
+
+from pyspark.ml.feature import VectorIndexer
+
+featureIndexer = VectorIndexer(inputCol="features", outputCol="indexedFeatures",maxCategories=4).fit(data)
+
+featureIndexer.transform(data).show(5)
+
+(trainingData, testData) = data.randomSplit([0.7, 0.3])
+
+from pyspark.ml.classification import DecisionTreeClassifier
+
+dt = DecisionTreeClassifier(labelCol="indexedLabel",featuresCol="indexedFeatures")
+
+from pyspark.ml import Pipeline
+
+pipeline = Pipeline(stages=[labelIndexer, featureIndexer, dt])
+
+model = pipeline.fit(trainingData)
+
+predictions = model.transform(testData)
+
+predictions.select("prediction", "indexedLabel", "features").show(5)
+
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel",predictionCol="prediction", metricName="accuracy")
+
+accuracy = evaluator.evaluate(predictions)
+
+print("Test Error = %g " % (1.0 - accuracy))
+
+treeModel = model.stages[2]
+
+print(treeModel)
+
+print(treeModel.toDebugString)
+
+
+
+from pyspark.ml.classification import LogisticRegression
+lr = LogisticRegression(labelCol="indexedLabel",featuresCol="indexedFeatures")
+pipeline = Pipeline(stages=[labelIndexer, featureIndexer, lr])
+model = pipeline.fit(trainingData)
+predictions = model.transform(testData)
+
+lr_model = lr.fit(trainingData)
+predictions = lr_model.transform(testData)
+evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy")
+accuracy = evaluator.evaluate(predictions)
+
+precision_evaluator = MulticlassClassificationEvaluator(labelCol="target_index", predictionCol="prediction", metricName="weightedPrecision")
+precision = precision_evaluator.evaluate(predictions)
+
+
+recall_evaluator = MulticlassClassificationEvaluator(labelCol="target_index", predictionCol="prediction", metricName="weightedRecall")
+recall = recall_evaluator.evaluate(predictions)
+
+f1_evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="f1")
+f1_score = f1_evaluator.evaluate(predictions)
+
+print("Accuracy:", accuracy)
+print("Precision:", precision)
+print("Recall:", recall)
+print("F1-score:", f1_score)
+
+evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy")
+accuracy = evaluator.evaluate(predictions)
+
+evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="weightedPrecision")
+precision = evaluator.evaluate(predictions)
+
+evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="weightedRecall")
+recall = evaluator.evaluate(predictions)
+
+evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="f1")
+f1_score = evaluator.evaluate(predictions)
+
+
+predictionAndLabel = predictions.select("prediction", "indexedLabel").rdd.map(lambda row: (float(row.prediction), float(row.indexedLabel)))
+metrics = MulticlassMetrics(predictionAndLabel)
+accuracy = metrics.accuracy
+precision_by_label = metrics.precision()
+recall_by_label = metrics.recall()
+f1_by_label = metrics.fMeasure()
+
+weighted_precision = metrics.weightedPrecision
+weighted_recall = metrics.weightedRecall
+weighted_f1 = metrics.weightedFMeasure()
+
+print("Accuracy:", accuracy)
+print("Precision by label:", precision_by_label)
+print("Recall by label:", recall_by_label)
+print("F1-score by label:", f1_by_label)
+print("Weighted Precision:", weighted_precision)
+print("Weighted Recall:", weighted_recall)
+print("Weighted F1-score:", weighted_f1)
